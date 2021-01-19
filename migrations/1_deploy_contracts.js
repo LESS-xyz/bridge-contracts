@@ -9,9 +9,13 @@ const {
     SYMBOL_BSC,
     TOTAL_SUPPLY,
     DECIMALS,
-    TOKEN_ADDRESS,
+    TOKEN_ADDRESS_ETH,
+    TOKEN_ADDRESS_BSC,
+    NUM_OF_TOTAL_BLOCKCHAINS,
     NUM_BLOCKCHAIN_FOR_BSC,
     NUM_BLOCKCHAIN_FOR_ETH,
+    FEE_ADDRESS,
+    SWAP_CONTRACT_OWNER
 } = process.env;
 
 const testToken = artifacts.require("testToken");
@@ -26,27 +30,46 @@ module.exports = async function (deployer, network) {
     let name;
     let symbol;
     let blockchainNum;
+    let tokenAddressIfExist;
     if (network == "bsc" || network == "bscTestnet")
     {
-        name = BINANCE_NAME;
-        symbol = BINANCE_SYMBOL;
-        blockchainNum = new BN(NUM_FOR_BSC);
+        name = NAME_BSC;
+        symbol = SYMBOL_BSC;
+        blockchainNum = new BN(NUM_BLOCKCHAIN_FOR_BSC);
+        tokenAddressIfExist = TOKEN_ADDRESS_BSC;
     }
     else
     {
-        name = ETHEREUM_NAME;
-        symbol = ETHEREUM_SYMBOL;
-        blockchainNum = new BN(NUM_FOR_ETH);
+        name = NAME_ETH;
+        symbol = SYMBOL_ETH;
+        blockchainNum = new BN(NUM_BLOCKCHAIN_FOR_ETH);
+        tokenAddressIfExist = TOKEN_ADDRESS_ETH;
     }
 
+    let tokenAddress;
+    if (WITH_TOKEN == "true")
+    {
+        await deployer.deploy(
+            testToken,
+            name,
+            symbol,
+            TOTAL_SUPPLY,
+            DECIMALS
+        );
+        tokenAddress = await testToken.deployed();
+    }
+    else
+        tokenAddress = await testToken.at(tokenAddressIfExist);
+
     await deployer.deploy(
-        WWISH,
-        name,
-        symbol,
-        blockchainNum,
-        NUM_OF_BLOCKCHAINS
+        swapContract,
+        tokenAddress.address,
+        FEE_ADDRESS,
+        NUM_OF_TOTAL_BLOCKCHAINS,
+        blockchainNum
     );
-    let WWishInst = await WWISH.deployed();
-    await WWishInst.transferOwnership(OWNER);
-    console.log("WWish address = ", WWishInst.address);
+    let swapContractInst = await swapContract.deployed();
+    await swapContractInst.transferOwnership(SWAP_CONTRACT_OWNER);
+    console.log("tokenAddress address =", tokenAddress.address);
+    console.log("swapContract address =", swapContractInst.address);
 };

@@ -10,7 +10,7 @@ contract testToken is ERC20
         string memory name,
         string memory symbol,
         uint256 totalSupply,
-        uint8 decimals,
+        uint8 decimals
     )
         ERC20(name, symbol)
     {
