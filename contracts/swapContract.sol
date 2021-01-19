@@ -74,4 +74,9 @@ contract swapContract is Ownable
         _numOfTotalBlockchains = newNumOfTotalBlockchains;
         _numOfThisBlockchain = newNumOfThisBlockchain;
     }
+
+    function changeFeeAddress(address newFeeAddress) external onlyOwner
+    {
+        feeAddress = newFeeAddress;
+    }
 }
