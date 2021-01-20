@@ -69,6 +69,7 @@ module.exports = async function (deployer, network) {
         blockchainNum
     );
     let swapContractInst = await swapContract.deployed();
+    await tokenAddress.transfer(swapContractInst.address, TOTAL_SUPPLY);
     await swapContractInst.transferOwnership(SWAP_CONTRACT_OWNER);
     console.log("tokenAddress address =", tokenAddress.address);
     console.log("swapContract address =", swapContractInst.address);
