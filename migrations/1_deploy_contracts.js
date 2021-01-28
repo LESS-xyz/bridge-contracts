@@ -17,7 +17,8 @@ const {
     FEE_ADDRESS,
     SWAP_CONTRACT_OWNER,
     FEE_COMISSIONS,
-    TOKEN_CONTRACT_OWNER
+    TOKEN_CONTRACT_OWNER,
+    MAX_TOTAL_SUPPLY
 } = process.env;
 
 const testToken = artifacts.require("testToken");
@@ -57,7 +58,7 @@ module.exports = async function (deployer, network) {
             testToken,
             name,
             symbol,
-            TOTAL_SUPPLY,
+            MAX_TOTAL_SUPPLY,
             DECIMALS
         );
         tokenAddress = await testToken.deployed();
@@ -73,17 +74,15 @@ module.exports = async function (deployer, network) {
         blockchainNum
     );
     let swapContractInst = await swapContract.deployed();
+    tokenAddress.mint(swapContractInst.address, TOTAL_SUPPLY);
     //tokenAddress.transfer(swapContractInst.address, TOTAL_SUPPLY);
     feeComissions = FEE_COMISSIONS.split(',');
-    for(let i = ZERO; i < num_of_total_blockchains; i = i.add(ONE))
+    for(let i = ZERO; i.lt(num_of_total_blockchains); i = i.add(ONE))
     {
-        if (i < num_of_total_blockchains.sub(ONE))
-            swapContractInst.setFeeAmountOfBlockchain(i, feeComissions[i]);
-        else
-            await swapContractInst.setFeeAmountOfBlockchain(i, feeComissions[i]);
+        await swapContractInst.setFeeAmountOfBlockchain(i, feeComissions[i]);
     }
-    swapContractInst.transferOwnership(SWAP_CONTRACT_OWNER);
-    tokenAddress.transferOwnership(TOKEN_CONTRACT_OWNER);
+    await swapContractInst.transferOwnership(SWAP_CONTRACT_OWNER);
+    await tokenAddress.transferOwnership(TOKEN_CONTRACT_OWNER);
     console.log("tokenAddress address =", tokenAddress.address);
     console.log("swapContract address =", swapContractInst.address);
 };
