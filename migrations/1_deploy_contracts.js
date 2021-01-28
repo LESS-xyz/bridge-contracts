@@ -16,7 +16,8 @@ const {
     NUM_BLOCKCHAIN_FOR_ETH,
     FEE_ADDRESS,
     SWAP_CONTRACT_OWNER,
-    FEE_COMISSIONS
+    FEE_COMISSIONS,
+    TOKEN_CONTRACT_OWNER
 } = process.env;
 
 const testToken = artifacts.require("testToken");
@@ -72,7 +73,7 @@ module.exports = async function (deployer, network) {
         blockchainNum
     );
     let swapContractInst = await swapContract.deployed();
-    tokenAddress.transfer(swapContractInst.address, TOTAL_SUPPLY);
+    //tokenAddress.transfer(swapContractInst.address, TOTAL_SUPPLY);
     feeComissions = FEE_COMISSIONS.split(',');
     for(let i = ZERO; i < num_of_total_blockchains; i = i.add(ONE))
     {
@@ -82,6 +83,7 @@ module.exports = async function (deployer, network) {
             await swapContractInst.setFeeAmountOfBlockchain(i, feeComissions[i]);
     }
     swapContractInst.transferOwnership(SWAP_CONTRACT_OWNER);
+    tokenAddress.transferOwnership(TOKEN_CONTRACT_OWNER);
     console.log("tokenAddress address =", tokenAddress.address);
     console.log("swapContract address =", swapContractInst.address);
 };
