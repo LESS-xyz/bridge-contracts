@@ -77,9 +77,9 @@ module.exports = async function (deployer, network) {
     for(let i = ZERO; i < num_of_total_blockchains; i = i.add(ONE))
     {
         if (i < num_of_total_blockchains.sub(ONE))
-        swapContractInst.setFeeAmountOfBlockchain(i, feeComissions[i]);
+            swapContractInst.setFeeAmountOfBlockchain(i, feeComissions[i]);
         else
-        await swapContractInst.setFeeAmountOfBlockchain(i, feeComissions[i]);
+            await swapContractInst.setFeeAmountOfBlockchain(i, feeComissions[i]);
     }
     swapContractInst.transferOwnership(SWAP_CONTRACT_OWNER);
     console.log("tokenAddress address =", tokenAddress.address);

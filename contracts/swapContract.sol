@@ -43,6 +43,10 @@ contract swapContract is Ownable
     function transferToOtherBlockchain(uint128 blockchain, uint256 amount, string memory newAddress) external
     {
         require(
+            bytes(newAddress).length > 0,
+            "swapContract: No destination address provided"
+        );
+        require(
             blockchain < numOfTotalBlockchains && blockchain != numOfThisBlockchain,
             "swapContract: Wrong choose of blockchain"
         );
