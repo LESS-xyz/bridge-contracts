@@ -74,7 +74,7 @@ module.exports = async function (deployer, network) {
         blockchainNum
     );
     let swapContractInst = await swapContract.deployed();
-    tokenAddress.mint(swapContractInst.address, TOTAL_SUPPLY);
+    await tokenAddress.mint(swapContractInst.address, TOTAL_SUPPLY);
     //tokenAddress.transfer(swapContractInst.address, TOTAL_SUPPLY);
     feeComissions = FEE_COMISSIONS.split(',');
     for(let i = ZERO; i.lt(num_of_total_blockchains); i = i.add(ONE))
