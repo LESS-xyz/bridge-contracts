@@ -3,6 +3,7 @@ const HDWalletProvider = require('truffle-hdwallet-provider');
 require('dotenv').config();
 const {
     ETHERSCAN_API_KEY,
+    BSCSCAN_API_KEY,
     MNEMONIC,
     DEPLOY_GAS_LIMIT,
     DEPLOY_GAS_PRICE,
@@ -16,7 +17,8 @@ module.exports = {
     plugins: ['truffle-plugin-verify'],
 
     api_keys: {
-        etherscan: ETHERSCAN_API_KEY
+        etherscan: ETHERSCAN_API_KEY,
+        bscscan: BSCSCAN_API_KEY,
     },
 
     networks: {
@@ -36,6 +38,7 @@ module.exports = {
         mainnet: {
             provider: () => new HDWalletProvider(MNEMONIC, "https://mainnet.infura.io/v3/" + INFURA_ID_PROJECT),
             network_id: 1,
+            confirmations: 10,
             gasPrice: web3.utils.toWei(DEPLOY_GAS_PRICE, 'gwei'),
             gas: DEPLOY_GAS_LIMIT,
             skipDryRun: false
@@ -60,6 +63,8 @@ module.exports = {
             network_id: 97,
             confirmations: 2,
             timeoutBlocks: 200,
+            gasPrice: web3.utils.toWei(DEPLOY_GAS_PRICE, 'gwei'),
+            gas: DEPLOY_GAS_LIMIT,
             skipDryRun: true
         },
         bsc: {
@@ -67,6 +72,8 @@ module.exports = {
             network_id: 56,
             confirmations: 10,
             timeoutBlocks: 200,
+            gasPrice: web3.utils.toWei(DEPLOY_GAS_PRICE, 'gwei'),
+            gas: DEPLOY_GAS_LIMIT,
             skipDryRun: false
         }
 

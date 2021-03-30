@@ -27,7 +27,7 @@ contract testToken is ERC20, Ownable
     function mint(address to, uint256 amount) external onlyOwner
     {
         require(
-            totalSupply().add(amount) < maxTotalSupply,
+            totalSupply().add(amount) <= maxTotalSupply,
             "Token: Total supply will exceed max total supply"
         );
         _mint(to, amount);
