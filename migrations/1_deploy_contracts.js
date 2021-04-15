@@ -2,7 +2,8 @@ const BN = require('bn.js');
 
 require('dotenv').config();
 const {
-    WITH_TOKEN,
+    WITH_TOKEN_ETH,
+    WITH_TOKEN_BSC,
     NAME_ETH,
     SYMBOL_ETH,
     NAME_BSC,
@@ -21,7 +22,8 @@ const {
     TOKEN_TRANSFER_OWNERSHIP,
     TOKEN_CONTRACT_OWNER,
     MAX_TOTAL_SUPPLY,
-    PREMINT_SUPPLY
+    PREMINT_SUPPLY_DEST_BSC,
+    PREMINT_SUPPLY_DEST_ETH,
 } = process.env;
 
 const testToken = artifacts.require("testToken");
@@ -37,10 +39,13 @@ module.exports = async function (deployer, network) {
     let name;
     let symbol;
     let blockchainNum;
+    let withToken;
     let tokenAddressIfExist;
     let allBlockchainNums = ALL_BLOCKCHAIN_NUMS_LIST.split(',')
+    let premintSupplyDest;
     if (network == "bsc" || network == "bscTestnet")
     {
+        withToken = WITH_TOKEN_BSC
         name = NAME_BSC;
         symbol = SYMBOL_BSC;
         blockchainNum = new BN(NUM_BLOCKCHAIN_FOR_BSC);
@@ -48,20 +53,23 @@ module.exports = async function (deployer, network) {
         otherBlockchainNums = allBlockchainNums.filter(function(e) {
             return e !== blockchainNum.toString()
         });
+        premintSupplyDest = PREMINT_SUPPLY_DEST_BSC;
     }
     else
     {
+        withToken = WITH_TOKEN_ETH;
         name = NAME_ETH;
         symbol = SYMBOL_ETH;
         blockchainNum = new BN(NUM_BLOCKCHAIN_FOR_ETH);
         tokenAddressIfExist = TOKEN_ADDRESS_ETH;
         otherBlockchainNums = allBlockchainNums.filter(function(e) {
             return e !== blockchainNum.toString()
-        })
+        });
+        premintSupplyDest = PREMINT_SUPPLY_DEST_ETH;
     }
 
     let token;
-    if (WITH_TOKEN == "true")
+    if (withToken == "true")
     {
         await deployer.deploy(
             testToken,
@@ -86,12 +94,12 @@ module.exports = async function (deployer, network) {
         otherBlockchainNums
     );
     let swapContractInst = await swapContract.deployed();
-    if (WITH_TOKEN == "true" && PREMINT_SUPPLY != "")
+    if (withToken == "true" && premintSupplyDest != "")
     {
-        if (PREMINT_SUPPLY == "swapContract") {
+        if (premintSupplyDest == "swapContract") {
             await token.mint(swapContractInst.address, TOTAL_SUPPLY);
             console.log("total supply of ", TOTAL_SUPPLY, "minted to swap contract ")
-        } else if (PREMINT_SUPPLY == "owner") {
+        } else if (premintSupplyDest == "owner") {
             await token.mint(TOKEN_CONTRACT_OWNER, TOTAL_SUPPLY);
             console.log("total supply of ", TOTAL_SUPPLY, "minted to token contract owner")
         }
@@ -105,9 +113,10 @@ module.exports = async function (deployer, network) {
         await swapContractInst.setFeeAmountOfBlockchain(allBlockchainNums[i], feeComissions[i]);
         console.log("Set commission = ", feeComissions[i], " on blockchain number = ", allBlockchainNums[i])
     }
+
     await swapContractInst.transferOwnerAndSetManager(SWAP_CONTRACT_OWNER, SWAP_CONTRACT_MANAGER);
     console.log("swap contract ownership transferred, owner", SWAP_CONTRACT_OWNER, "manager", SWAP_CONTRACT_MANAGER)
-    if (WITH_TOKEN == "true" && TOKEN_TRANSFER_OWNERSHIP == "true")
+    if (withToken == "true" && TOKEN_TRANSFER_OWNERSHIP == "true")
     {
         await token.transferOwnership(TOKEN_CONTRACT_OWNER);
         console.log("token contract ownership transferred to ", TOKEN_TRANSFER_OWNERSHIP)
