@@ -2,6 +2,9 @@ const BN = require('bn.js');
 
 require('dotenv').config();
 const {
+    DEPLOY_GAS_LIMIT_TOKEN,
+    DEPLOY_GAS_LIMIT_BRIDGE,
+    DEPLOY_GAS_LIMIT_TXES,
     WITH_TOKEN_ETH,
     WITH_TOKEN_BSC,
     NAME_ETH,
@@ -21,9 +24,21 @@ const {
     FEE_COMISSIONS,
     TOKEN_TRANSFER_OWNERSHIP,
     TOKEN_CONTRACT_OWNER,
+    BRIDGE_TRANSFER_OWNERSHIP,
     MAX_TOTAL_SUPPLY,
     PREMINT_SUPPLY_DEST_BSC,
     PREMINT_SUPPLY_DEST_ETH,
+    // Relayer update parameters
+    MIN_CONFIRMATION_SIGNATURES,
+    MIN_CONFIRMATION_BLOCKS,
+    MIN_TOKEN_AMOUNT_BSC,
+    MIN_TOKEN_AMOUNT_ETH,
+    MAX_GAS_PRICE_BSC,
+    MAX_GAS_PRICE_ETH,
+    WITH_VALIDATORS,
+    WITH_RELAYERS,
+    VALIDATORS_ADDRESSES,
+    RELAYERS_ADDRESSES,
 } = process.env;
 
 const testToken = artifacts.require("testToken");
@@ -33,7 +48,7 @@ const ZERO = new BN(0);
 const ONE = new BN(1);
 
 module.exports = async function (deployer, network) {
-    if (network == "test" || network == "development")
+    if (network == "test" || network == "development" || network == "ganache")
         return;
 
     let name;
@@ -43,6 +58,8 @@ module.exports = async function (deployer, network) {
     let tokenAddressIfExist;
     let allBlockchainNums = ALL_BLOCKCHAIN_NUMS_LIST.split(',')
     let premintSupplyDest;
+    let minTokenAmount;
+    let maxGasPrice;
     if (network == "bsc" || network == "bscTestnet")
     {
         withToken = WITH_TOKEN_BSC
@@ -54,6 +71,8 @@ module.exports = async function (deployer, network) {
             return e !== blockchainNum.toString()
         });
         premintSupplyDest = PREMINT_SUPPLY_DEST_BSC;
+        minTokenAmount = MIN_TOKEN_AMOUNT_BSC;
+        maxGasPrice = MAX_GAS_PRICE_BSC;
     }
     else
     {
@@ -66,6 +85,8 @@ module.exports = async function (deployer, network) {
             return e !== blockchainNum.toString()
         });
         premintSupplyDest = PREMINT_SUPPLY_DEST_ETH;
+        minTokenAmount = MIN_TOKEN_AMOUNT_ETH;
+        maxGasPrice = MAX_GAS_PRICE_ETH;
     }
 
     let token;
@@ -76,7 +97,8 @@ module.exports = async function (deployer, network) {
             name,
             symbol,
             MAX_TOTAL_SUPPLY,
-            DECIMALS
+            DECIMALS,
+            {gas: DEPLOY_GAS_LIMIT_TOKEN}
         );
         token = await testToken.deployed();
         tokenAddress = token.address;
@@ -91,16 +113,21 @@ module.exports = async function (deployer, network) {
         tokenAddress,
         FEE_ADDRESS,
         blockchainNum,
-        otherBlockchainNums
+        otherBlockchainNums,
+        MIN_CONFIRMATION_SIGNATURES,
+        minTokenAmount,
+        maxGasPrice,
+        MIN_CONFIRMATION_BLOCKS,
+        {gas: DEPLOY_GAS_LIMIT_BRIDGE}
     );
     let swapContractInst = await swapContract.deployed();
     if (withToken == "true" && premintSupplyDest != "")
     {
         if (premintSupplyDest == "swapContract") {
-            await token.mint(swapContractInst.address, TOTAL_SUPPLY);
+            await token.mint(swapContractInst.address, TOTAL_SUPPLY, {gas: DEPLOY_GAS_LIMIT_TXES});
             console.log("total supply of ", TOTAL_SUPPLY, "minted to swap contract ")
         } else if (premintSupplyDest == "owner") {
-            await token.mint(TOKEN_CONTRACT_OWNER, TOTAL_SUPPLY);
+            await token.mint(TOKEN_CONTRACT_OWNER, TOTAL_SUPPLY), {gas: DEPLOY_GAS_LIMIT_TXES};
             console.log("total supply of ", TOTAL_SUPPLY, "minted to token contract owner")
         }
         
@@ -110,16 +137,64 @@ module.exports = async function (deployer, network) {
     feeComissionsLength = new BN(feeComissions.length);
     for(let i = ZERO; i.lt(feeComissionsLength); i = i.add(ONE))
     {
-        await swapContractInst.setFeeAmountOfBlockchain(allBlockchainNums[i], feeComissions[i]);
-        console.log("Set commission = ", feeComissions[i], " on blockchain number = ", allBlockchainNums[i])
+        let feeAmountsTx = await swapContractInst.setFeeAmountOfBlockchain(
+            allBlockchainNums[i],
+            feeComissions[i],
+            {gas: DEPLOY_GAS_LIMIT_TXES}
+        );
+        console.log("Set commission = ", feeComissions[i], " on blockchain number = ", allBlockchainNums[i]);
+        // console.log(feeAmountsTx);
     }
 
-    await swapContractInst.transferOwnerAndSetManager(SWAP_CONTRACT_OWNER, SWAP_CONTRACT_MANAGER);
-    console.log("swap contract ownership transferred, owner", SWAP_CONTRACT_OWNER, "manager", SWAP_CONTRACT_MANAGER)
+    if (WITH_VALIDATORS == "true") {
+        validators = VALIDATORS_ADDRESSES.split(',');
+        validatorsLength = new BN(validators.length);
+        validator_role = await swapContractInst.VALIDATOR_ROLE();
+        for(let i = ZERO; i.lt(validatorsLength); i = i.add(ONE))
+        {
+            let validatorAddTx = await swapContractInst.grantRole(
+                validator_role,
+                validators[i],
+                {gas: DEPLOY_GAS_LIMIT_TXES}
+                )
+            console.log("Added validator ", validators[i])
+        }
+    }
+
+    if (WITH_RELAYERS == "true") {
+        relayers = RELAYERS_ADDRESSES.split(',');
+        relayersLength = new BN(relayers.length);
+        relayer_role = await swapContractInst.RELAYER_ROLE();
+        for(let i = ZERO; i.lt(relayersLength); i = i.add(ONE))
+        {
+            let relayerAddTx = await swapContractInst.grantRole(
+                relayer_role,
+                relayers[i],
+                {gas: DEPLOY_GAS_LIMIT_TXES}
+                )
+            console.log("Added relayer ", relayers[i])
+        }
+    }
+
+    if (BRIDGE_TRANSFER_OWNERSHIP == "true") {
+        await swapContractInst.transferOwnerAndSetManager(
+            SWAP_CONTRACT_OWNER,
+            SWAP_CONTRACT_MANAGER,
+            {gas: DEPLOY_GAS_LIMIT_TXES}
+        );
+        console.log("swap contract ownership transferred, owner", SWAP_CONTRACT_OWNER, "manager", SWAP_CONTRACT_MANAGER)
+    }
+    
+    // console.log(transferOwnershipSwapTx)
+
     if (withToken == "true" && TOKEN_TRANSFER_OWNERSHIP == "true")
     {
-        await token.transferOwnership(TOKEN_CONTRACT_OWNER);
-        console.log("token contract ownership transferred to ", TOKEN_TRANSFER_OWNERSHIP)
+        let transferOwnershipTokenTx = await token.transferOwnership(
+            TOKEN_CONTRACT_OWNER,
+            {gas: DEPLOY_GAS_LIMIT_TXES}
+        );
+        console.log("token contract ownership transferred to ", TOKEN_TRANSFER_OWNERSHIP);
+        // console.log(transferOwnershipTx);
     }
     console.log("tokenAddress address =", tokenAddress);
     console.log("swapContract address =", swapContractInst.address);

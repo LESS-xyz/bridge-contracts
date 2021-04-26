@@ -1,11 +1,13 @@
-const HDWalletProvider = require('truffle-hdwallet-provider');
+const ganache = require('ganache-core');
+const HDWalletProvider = require("truffle-hdwallet-provider");
+const BN = require("bn.js");
 
 require('dotenv').config();
 const {
     ETHERSCAN_API_KEY,
     BSCSCAN_API_KEY,
     MNEMONIC,
-    DEPLOY_GAS_LIMIT,
+    DEPLOY_GAS_LIMIT_MAX,
     DEPLOY_GAS_PRICE,
     INFURA_ID_PROJECT
 } = process.env;
@@ -28,11 +30,22 @@ module.exports = {
             network_id: "*",
             gas: 30000000
         }, */
+        ganache: {
+            network_id: '*', // eslint-disable-line camelcase
+            provider: ganache.provider({
+                total_accounts: 15, // eslint-disable-line camelcase
+                default_balance_ether: new BN(10000000), // eslint-disable-line camelcase
+                mnemonic: 'bridge',
+                // time: new Date('2017-10-10T15:00:00Z'),
+                // debug: false,
+                // ,logger: console
+            }),
+        },
         ropsten: {
             provider: () => new HDWalletProvider(MNEMONIC, "https://ropsten.infura.io/v3/" + INFURA_ID_PROJECT),
             network_id: 3,
-            gas: DEPLOY_GAS_LIMIT,
-            confirmations: 2,
+            gas: DEPLOY_GAS_LIMIT_MAX,
+            confirmations: 0,
             skipDryRun: true
         },
         mainnet: {
@@ -40,7 +53,7 @@ module.exports = {
             network_id: 1,
             confirmations: 10,
             gasPrice: web3.utils.toWei(DEPLOY_GAS_PRICE, 'gwei'),
-            gas: DEPLOY_GAS_LIMIT,
+            gas: DEPLOY_GAS_LIMIT_MAX,
             skipDryRun: false
         },
         kovan: {
@@ -48,14 +61,14 @@ module.exports = {
             network_id: 42,
             confirmations: 0,
             gasPrice: web3.utils.toWei(DEPLOY_GAS_PRICE, 'gwei'),
-            gas: DEPLOY_GAS_LIMIT,
+            gas: DEPLOY_GAS_LIMIT_MAX,
             skipDryRun: true
         },
         rinkeby: {
             provider: () => new HDWalletProvider(MNEMONIC, "https://rinkeby.infura.io/v3/" + INFURA_ID_PROJECT),
             network_id: 4,
             confirmations: 2,
-            gas: DEPLOY_GAS_LIMIT,
+            gas: DEPLOY_GAS_LIMIT_MAX,
             skipDryRun: true
         },
         bscTestnet: {
@@ -64,7 +77,7 @@ module.exports = {
             confirmations: 2,
             timeoutBlocks: 200,
             gasPrice: web3.utils.toWei(DEPLOY_GAS_PRICE, 'gwei'),
-            gas: DEPLOY_GAS_LIMIT,
+            gas: DEPLOY_GAS_LIMIT_MAX,
             skipDryRun: true
         },
         bsc: {
@@ -73,7 +86,7 @@ module.exports = {
             confirmations: 10,
             timeoutBlocks: 200,
             gasPrice: web3.utils.toWei(DEPLOY_GAS_PRICE, 'gwei'),
-            gas: DEPLOY_GAS_LIMIT,
+            gas: DEPLOY_GAS_LIMIT_MAX,
             skipDryRun: false
         }
 

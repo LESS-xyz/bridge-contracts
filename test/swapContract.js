@@ -3,6 +3,7 @@ const chai = require("chai");
 const { expect, assert } = require("chai");
 const expectRevert = require("./utils/expectRevert.js");
 chai.use(require("chai-bn")(BN));
+const EthCrypto = require("eth-crypto");
 
 require('dotenv').config();
 const {
@@ -23,6 +24,8 @@ const TEN = new BN(10);
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
+const MOCK_TX_HASH = "0x95e91dc595867b43a1be564037a6f639bae2c650d58835c09b3a64528f2328d3";
+
 const DECIMALS = new BN(18);
 const ONE_TOKEN = TEN.pow(DECIMALS);
 
@@ -31,11 +34,55 @@ const TOTAL_SUPPLY = ONE_TOKEN.mul(new BN(1000000));
 const swapContract = artifacts.require('swapContract');
 const testToken = artifacts.require('testToken');
 
+
+// DO NOT USE THESE ADDRESSES ON RECEIVING MAINNET FUNDS
+const mockValidators = {
+    "first": {
+        "address": web3.utils.toChecksumAddress("0x7647735ad237462a375Fa53103F899213138692b"),
+        "priv": "0xa4e3b013bdac3eb8afcdd18b4965ddee5966aaeb88028bccdd20159f86f7b1fd",
+    },
+    "second": {
+        "address": web3.utils.toChecksumAddress("0xA89A309F2Dec6bFcC317D654f8e6D6f4595CD655"),
+        "priv": "0x0bac03ccf4a1e2c9114f8c4ca8f11f0d9340f1f366fa38ba807ecd385c93aa13"
+    },
+    "third": {
+        "address": web3.utils.toChecksumAddress("0x4A58f4B653DF4198A4C913543153629209B6794d"),
+        "priv": "0xb1a370ad5fdbb0db4f349faaa0c25331191c0ebea512ba778f2e5956c0e1678e"
+    }
+}
+
+
+const getMessageHash = (encodeTypes, args) => {
+    let encoded = web3.eth.abi.encodeParameters(encodeTypes, args);
+
+    return web3.utils.soliditySha3(encoded);
+};
+
+const getTransferMessageHash = (user, amount, originalHash) => {
+    const messageParamsTypes = ["address", "uint256", "bytes32"];
+
+    return getMessageHash(
+        messageParamsTypes,
+        [user, amount, originalHash]
+    );
+}
+
+const signTransferParameters = (user, amount, originalHash, accountPrivateKey) => {
+    const messageHash = getTransferMessageHash(
+        user.toString(), amount.toString(), originalHash.toString()
+    );
+
+    return EthCrypto.sign(accountPrivateKey, messageHash);
+};
+
+
 contract(
     'swapContract-test',
     ([
         swapContractOwner,
         swapContractManager,
+        relayer1,
+        relayer2,
         testTokenOwner,
         feeAddress,
         newFeeAddress,
@@ -49,6 +96,13 @@ contract(
 
         let name = "Name";
         let symbol = "Symbol";
+
+        let OWNER_ROLE;
+        let MANAGER_ROLE;
+        let RELAYER_ROLE;
+        let VALIDATOR_ROLE;
+        let minTokens;
+        let signatureLength;
 
         beforeEach(async () => {
             // Init contracts
@@ -66,8 +120,19 @@ contract(
                 feeAddress,
                 ZERO,
                 [ONE, TWO],
+                THREE,
+                FIVE,
+                TEN,
                 {from: swapContractOwner}
             );
+
+            OWNER_ROLE = await swapContractInst.OWNER_ROLE();
+            MANAGER_ROLE = await swapContractInst.MANAGER_ROLE();
+            RELAYER_ROLE = await swapContractInst.RELAYER_ROLE();
+            VALIDATOR_ROLE = await swapContractInst.VALIDATOR_ROLE();
+
+            minTokens = await swapContractInst.minTokenAmount();
+            signatureLength = await swapContractInst.SIGNATURE_LENGTH;
         })
 
         it("#0 Deploy test", async () => {
@@ -114,17 +179,17 @@ contract(
             expect(newFeeAmount).not.to.be.a.bignumber.equals(deployFeeAmount)
             await expectRevert(
                 swapContractInst.setFeeAmountOfBlockchain(ZERO, 15, {from: newManagerAddress}),
-                "Caller is not an owner or manager role"
+                "Caller is not in owner or manager role"
             );
 
             await swapContractInst.transferOwnerAndSetManager(newOwnerAddress, newManagerAddress);
             await expectRevert(
                 swapContractInst.changeFeeAddress(newFeeAddress, {from: swapContractOwner}),
-                "Caller is not an owner role"
+                "Caller is not in owner or manager role"
             );
             await expectRevert(
                 swapContractInst.setFeeAmountOfBlockchain(ZERO, 25, {from: swapContractOwner}),
-                "Caller is not an owner or manager role"
+                "Caller is not in owner or manager role"
             );
             await swapContractInst.changeFeeAddress(deployFeeAddress, {from: newOwnerAddress})
             const revertedFeeAddress = await swapContractInst.feeAddress();
@@ -138,18 +203,411 @@ contract(
             expect(thirdFeeAmount).not.be.be.a.bignumber.equals(secondFeeAmount);
         })
 
-        it("#2 Test changing blockchains", async () => {
-/*             const thisBlockchain = await swapContractInst.numOfThisBlockchain();
-            expect(thisBlockchain).to.be.a.bignumber.zero;
-            const otherBlockchainOne = await swapContractInst.getOtherBlockchainAvailableByNum(ONE);
-            const otherBlockchainTwo = await swapContractInst.getOtherBlockchainAvailableByNum(TWO);
-            expect(otherBlockchainOne).to.be.true;
-            expect(otherBlockchainTwo).to.be.true;
+        it("#2 Only relayer can access transfer function", async () => {
+            expect(
+                await  swapContractInst.isRelayer(relayer1)
+            ).to.be.false;
+            
+            await expectRevert(
+                swapContractInst.transferToUserWithFee(
+                    user1,
+                    FIVE,
+                    MOCK_TX_HASH,
+                    MOCK_TX_HASH, 
+                    {from: relayer1}
+                ),
+                "Caller is not in relayer role"
+            )
 
-            testTokenInst.mint(swapContractInst.address, ONE_TOKEN, {from: testTokenOwner});
-            const swapBalance = await testTokenInst.balanceOf(swapContractInst.address);
-            //console.log(swapBalance.toNumber())
-            expect(swapBalance).to.be.a.bignumber.equals(ONE_TOKEN); */
+            await swapContractInst.grantRole(RELAYER_ROLE, relayer1, {from: swapContractOwner});
+
+            expect(
+                await  swapContractInst.isRelayer(relayer1)
+            ).to.be.true;
+
+            await expectRevert(
+                swapContractInst.transferToUserWithFee(
+                    user1,
+                    FIVE,
+                    MOCK_TX_HASH,
+                    MOCK_TX_HASH, 
+                    {from: relayer1}
+                ),
+                "swapContract: Signatures lengths must be divisible by 65"
+            )
         })
+
+        it("#3 Cannot be executed with less than minimum tokens", async () => {
+            await swapContractInst.grantRole(RELAYER_ROLE, relayer1, {from: swapContractOwner});
+
+            expect(
+                await  swapContractInst.isRelayer(relayer1)
+            ).to.be.true;
+
+            const belowMinTokens = minTokens.sub(ONE);
+            expect(belowMinTokens).to.be.a.bignumber.below(minTokens);
+
+            await expectRevert(
+                swapContractInst.transferToUserWithFee(
+                    user1,
+                    belowMinTokens,
+                    MOCK_TX_HASH,
+                    MOCK_TX_HASH, 
+                    {from: relayer1}
+                ),
+                "swapContract: Amount must be greater than minimum"
+            )
+        })
+
+
+        it("#3 Cannot be executed with zero address", async () => {
+            await swapContractInst.grantRole(RELAYER_ROLE, relayer1, {from: swapContractOwner});
+
+            expect(
+                await  swapContractInst.isRelayer(relayer1)
+            ).to.be.true;
+
+            await expectRevert(
+                swapContractInst.transferToUserWithFee(
+                    ZERO_ADDRESS,
+                    minTokens,
+                    MOCK_TX_HASH,
+                    MOCK_TX_HASH, 
+                    {from: relayer1}
+                ),
+                "swapContract: Address cannot be zero address"
+            )
+        }) 
+        
+        it("#4 Should check lengths of bytes in signature", async () => {
+            await swapContractInst.grantRole(RELAYER_ROLE, relayer1, {from: swapContractOwner});
+
+            expect(
+                await  swapContractInst.isRelayer(relayer1)
+            ).to.be.true;
+
+            await expectRevert(
+                swapContractInst.transferToUserWithFee(
+                    user1,
+                    minTokens,
+                    MOCK_TX_HASH,
+                    MOCK_TX_HASH, 
+                    {from: relayer1}
+                ),
+                "swapContract: Signatures lengths must be divisible by 65"
+            )
+
+            const firstValidatorSignature = signTransferParameters(user1, minTokens, MOCK_TX_HASH, mockValidators.first.priv)
+            await expectRevert(
+                swapContractInst.transferToUserWithFee(
+                    user1,
+                    minTokens,
+                    MOCK_TX_HASH,
+                    firstValidatorSignature, 
+                    {from: relayer1}
+                ),
+                "swapContract: Not enough signatures passed"
+            )
+
+        })
+        
+        it("#5 Should revert if length of signatures less that minimum confirmations", async () => {
+            await swapContractInst.grantRole(RELAYER_ROLE, relayer1, {from: swapContractOwner});
+
+            expect(
+                await  swapContractInst.isRelayer(relayer1)
+            ).to.be.true;
+
+            const firstValidatorSignature = signTransferParameters(user1, minTokens, MOCK_TX_HASH, mockValidators.first.priv)
+            const secondValidatorSignature = signTransferParameters(user1, minTokens, MOCK_TX_HASH, mockValidators.second.priv)
+            const secondValidatorSignatureSliced = secondValidatorSignature.slice(2, secondValidatorSignature.length)
+            const thirdValidatorSignature = signTransferParameters(user1, minTokens, MOCK_TX_HASH, mockValidators.third.priv)
+            const thirdValidatorSignatureSliced = thirdValidatorSignature.slice(2, thirdValidatorSignature.length)
+            await expectRevert(
+                swapContractInst.transferToUserWithFee(
+                    user1,
+                    minTokens,
+                    MOCK_TX_HASH,
+                    firstValidatorSignature, 
+                    {from: relayer1}
+                ),
+                "swapContract: Not enough signatures passed"
+            )
+            
+            await expectRevert(
+                swapContractInst.transferToUserWithFee(
+                    user1,
+                    minTokens,
+                    MOCK_TX_HASH,
+                    firstValidatorSignature + secondValidatorSignatureSliced, 
+                    {from: relayer1}
+                ),
+                "swapContract: Not enough signatures passed"
+            )
+
+            await expectRevert(
+                swapContractInst.transferToUserWithFee(
+                    user1,
+                    minTokens,
+                    MOCK_TX_HASH,
+                    firstValidatorSignature + secondValidatorSignatureSliced + thirdValidatorSignatureSliced, 
+                    {from: relayer1}
+                ),
+                "swapContract: Validator address not in whitelist"
+            )
+
+        })
+
+        it("#6 Should revert if validators not added to roles", async () => {
+            await swapContractInst.grantRole(RELAYER_ROLE, relayer1, {from: swapContractOwner});
+
+            expect(
+                await  swapContractInst.isRelayer(relayer1)
+            ).to.be.true;
+
+            const firstValidatorSignature = signTransferParameters(user1, minTokens, MOCK_TX_HASH, mockValidators.first.priv)
+            const secondValidatorSignature = signTransferParameters(user1, minTokens, MOCK_TX_HASH, mockValidators.second.priv)
+            const secondValidatorSignatureSliced = secondValidatorSignature.slice(2, secondValidatorSignature.length)
+            const thirdValidatorSignature = signTransferParameters(user1, minTokens, MOCK_TX_HASH, mockValidators.third.priv)
+            const thirdValidatorSignatureSliced = thirdValidatorSignature.slice(2, thirdValidatorSignature.length)
+            const concatSignatures = firstValidatorSignature + secondValidatorSignatureSliced + thirdValidatorSignatureSliced
+
+            expect(
+                await  swapContractInst.isValidator(mockValidators.first.address)
+            ).to.be.false;
+            expect(
+                await  swapContractInst.isValidator(mockValidators.second.address)
+            ).to.be.false;
+            expect(
+                await  swapContractInst.isValidator(mockValidators.third.address)
+            ).to.be.false;
+
+            await expectRevert(
+                swapContractInst.transferToUserWithFee(
+                    user1,
+                    minTokens,
+                    MOCK_TX_HASH,
+                    concatSignatures, 
+                    {from: relayer1}
+                ),
+                "swapContract: Validator address not in whitelist"
+            )
+
+            await swapContractInst.grantRole(VALIDATOR_ROLE, mockValidators.first.address, {from: swapContractOwner});
+
+            expect(
+                await  swapContractInst.isValidator(mockValidators.first.address)
+            ).to.be.true;
+
+            await expectRevert(
+                swapContractInst.transferToUserWithFee(
+                    user1,
+                    minTokens,
+                    MOCK_TX_HASH,
+                    concatSignatures, 
+                    {from: relayer1}
+                ),
+                "swapContract: Validator address not in whitelist"
+            )
+
+            await swapContractInst.grantRole(VALIDATOR_ROLE, mockValidators.second.address, {from: swapContractOwner});
+
+            expect(
+                await  swapContractInst.isValidator(mockValidators.second.address)
+            ).to.be.true;
+
+            await expectRevert(
+                swapContractInst.transferToUserWithFee(
+                    user1,
+                    minTokens,
+                    MOCK_TX_HASH,
+                    concatSignatures, 
+                    {from: relayer1}
+                ),
+                "swapContract: Validator address not in whitelist"
+            )
+
+            await swapContractInst.grantRole(VALIDATOR_ROLE, mockValidators.third.address, {from: swapContractOwner});
+
+            expect(
+                await  swapContractInst.isValidator(mockValidators.third.address)
+            ).to.be.true;
+
+            await expectRevert(
+                swapContractInst.transferToUserWithFee(
+                    user1,
+                    minTokens,
+                    MOCK_TX_HASH,
+                    concatSignatures, 
+                    {from: relayer1}
+                ),
+                "ERC20: transfer amount exceeds balance"
+            )
+        })
+
+        it("#7 Should revert if validators are duplicate", async () => {
+            await swapContractInst.grantRole(RELAYER_ROLE, relayer1, {from: swapContractOwner});
+
+            expect(
+                await  swapContractInst.isRelayer(relayer1)
+            ).to.be.true;
+
+            const firstValidatorSignature = signTransferParameters(user1, minTokens, MOCK_TX_HASH, mockValidators.first.priv)
+            const firstValidatorSignatureSliced = firstValidatorSignature.slice(2, firstValidatorSignature.length)
+            const secondValidatorSignature = signTransferParameters(user1, minTokens, MOCK_TX_HASH, mockValidators.second.priv)
+            const secondValidatorSignatureSliced = secondValidatorSignature.slice(2, secondValidatorSignature.length)
+            const thirdValidatorSignature = signTransferParameters(user1, minTokens, MOCK_TX_HASH, mockValidators.third.priv)
+            const thirdValidatorSignatureSliced = thirdValidatorSignature.slice(2, thirdValidatorSignature.length)
+
+            await swapContractInst.grantRole(VALIDATOR_ROLE, mockValidators.first.address, {from: swapContractOwner});
+            await swapContractInst.grantRole(VALIDATOR_ROLE, mockValidators.second.address, {from: swapContractOwner});
+            await swapContractInst.grantRole(VALIDATOR_ROLE, mockValidators.third.address, {from: swapContractOwner});
+
+            const dupFirstConcatSignatures = firstValidatorSignature + firstValidatorSignatureSliced + thirdValidatorSignatureSliced
+            const dupSecondConcatSignatures = firstValidatorSignature + secondValidatorSignatureSliced + secondValidatorSignatureSliced
+            const dupThirdConcatSignatures = firstValidatorSignature + secondValidatorSignatureSliced + firstValidatorSignatureSliced
+
+            await expectRevert(
+                swapContractInst.transferToUserWithFee(
+                    user1,
+                    minTokens,
+                    MOCK_TX_HASH,
+                    dupFirstConcatSignatures, 
+                    {from: relayer1}
+                ),
+                "swapContract: Validator address is duplicated"
+            )
+
+            await expectRevert(
+                swapContractInst.transferToUserWithFee(
+                    user1,
+                    minTokens,
+                    MOCK_TX_HASH,
+                    dupSecondConcatSignatures, 
+                    {from: relayer1}
+                ),
+                "swapContract: Validator address is duplicated"
+            )
+
+            await expectRevert(
+                swapContractInst.transferToUserWithFee(
+                    user1,
+                    minTokens,
+                    MOCK_TX_HASH,
+                    dupThirdConcatSignatures, 
+                    {from: relayer1}
+                ),
+                "swapContract: Validator address is duplicated"
+            )
+        })
+
+        it("#8 Should send tokens to user and save hash", async () => {
+            await swapContractInst.grantRole(RELAYER_ROLE, relayer1, {from: swapContractOwner});
+
+            expect(
+                await  swapContractInst.isRelayer(relayer1)
+            ).to.be.true;
+
+            const firstValidatorSignature = signTransferParameters(user1, minTokens, MOCK_TX_HASH, mockValidators.first.priv)
+            const secondValidatorSignature = signTransferParameters(user1, minTokens, MOCK_TX_HASH, mockValidators.second.priv)
+            const secondValidatorSignatureSliced = secondValidatorSignature.slice(2, secondValidatorSignature.length)
+            const thirdValidatorSignature = signTransferParameters(user1, minTokens, MOCK_TX_HASH, mockValidators.third.priv)
+            const thirdValidatorSignatureSliced = thirdValidatorSignature.slice(2, thirdValidatorSignature.length)
+            const concatSignatures = firstValidatorSignature + secondValidatorSignatureSliced + thirdValidatorSignatureSliced
+
+            await swapContractInst.grantRole(VALIDATOR_ROLE, mockValidators.first.address, {from: swapContractOwner});
+            await swapContractInst.grantRole(VALIDATOR_ROLE, mockValidators.second.address, {from: swapContractOwner});
+            await swapContractInst.grantRole(VALIDATOR_ROLE, mockValidators.third.address, {from: swapContractOwner});
+
+            await testTokenInst.mint(swapContractInst.address, FIVE, {from: testTokenOwner})
+
+            expect(
+                await testTokenInst.balanceOf(swapContractInst.address)
+            ).to.be.bignumber.equals(FIVE);
+
+            await swapContractInst.transferToUserWithFee(
+                user1,
+                minTokens,
+                MOCK_TX_HASH,
+                concatSignatures, 
+                {from: relayer1}
+            )
+
+            expect(
+                await testTokenInst.balanceOf(user1)
+            ).to.be.bignumber.equals(FIVE);
+
+            const paramsHash = getTransferMessageHash(user1, minTokens, MOCK_TX_HASH);
+            const savedHash = await swapContractInst.processedTransactions(MOCK_TX_HASH)
+            expect(paramsHash).to.be.equals(savedHash);
+
+            const isProcessed = await swapContractInst.isProcessedTransaction(MOCK_TX_HASH);
+            expect(isProcessed.hashedParams).to.be.equals(paramsHash);
+            expect(isProcessed.processed).to.be.true
+
+        })
+
+            
+            
+        it("#9 Should revert if trying other params with same original hash", async () => {
+            await swapContractInst.grantRole(RELAYER_ROLE, relayer1, {from: swapContractOwner});
+
+            expect(
+                await  swapContractInst.isRelayer(relayer1)
+            ).to.be.true;
+
+            const firstValidatorSignature = signTransferParameters(user1, minTokens, MOCK_TX_HASH, mockValidators.first.priv)
+            const secondValidatorSignature = signTransferParameters(user1, minTokens, MOCK_TX_HASH, mockValidators.second.priv)
+            const secondValidatorSignatureSliced = secondValidatorSignature.slice(2, secondValidatorSignature.length)
+            const thirdValidatorSignature = signTransferParameters(user1, minTokens, MOCK_TX_HASH, mockValidators.third.priv)
+            const thirdValidatorSignatureSliced = thirdValidatorSignature.slice(2, thirdValidatorSignature.length)
+            const concatSignatures = firstValidatorSignature + secondValidatorSignatureSliced + thirdValidatorSignatureSliced
+
+            await swapContractInst.grantRole(VALIDATOR_ROLE, mockValidators.first.address, {from: swapContractOwner});
+            await swapContractInst.grantRole(VALIDATOR_ROLE, mockValidators.second.address, {from: swapContractOwner});
+            await swapContractInst.grantRole(VALIDATOR_ROLE, mockValidators.third.address, {from: swapContractOwner});
+
+            await testTokenInst.mint(swapContractInst.address, TEN, {from: testTokenOwner})
+
+            expect(
+                await testTokenInst.balanceOf(swapContractInst.address)
+            ).to.be.bignumber.equals(TEN);
+
+            await swapContractInst.transferToUserWithFee(
+                user1,
+                minTokens,
+                MOCK_TX_HASH,
+                concatSignatures, 
+                {from: relayer1}
+            )
+
+            expect(
+                await testTokenInst.balanceOf(user1)
+            ).to.be.bignumber.equals(FIVE);
+
+            const isProcessed = await swapContractInst.isProcessedTransaction(MOCK_TX_HASH);
+            expect(isProcessed.processed).to.be.true
+
+            const firstValidatorSignatureDup = signTransferParameters(user2, minTokens, MOCK_TX_HASH, mockValidators.first.priv)
+            const secondValidatorSignatureDup = signTransferParameters(user2, minTokens, MOCK_TX_HASH, mockValidators.second.priv)
+            const secondValidatorSignatureDupSliced = secondValidatorSignatureDup.slice(2, secondValidatorSignatureDup.length)
+            const thirdValidatorSignatureDup = signTransferParameters(user2, minTokens, MOCK_TX_HASH, mockValidators.third.priv)
+            const thirdValidatorSignatureDupSliced = thirdValidatorSignatureDup.slice(2, thirdValidatorSignatureDup.length)
+            const concatSignaturesDup = firstValidatorSignatureDup + secondValidatorSignatureDupSliced + thirdValidatorSignatureDupSliced
+            
+            
+            await expectRevert(
+                swapContractInst.transferToUserWithFee(
+                    user2,
+                    minTokens,
+                    MOCK_TX_HASH,
+                    concatSignaturesDup, 
+                    {from: relayer1}
+                ),
+                "swapContract: Transaction already processed"
+            )
+
+        })
+
     }
 )
