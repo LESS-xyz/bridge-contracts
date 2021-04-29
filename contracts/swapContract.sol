@@ -7,9 +7,10 @@ import "openzeppelin-solidity/contracts/token/ERC20/IERC20.sol";
 import "openzeppelin-solidity/contracts/access/AccessControl.sol";
 import "openzeppelin-solidity/contracts/math/SafeMath.sol";
 import "openzeppelin-solidity/contracts/utils/Pausable.sol";
-
 import "./ECDSAOffsetRecovery.sol";
 
+
+/// @title Swap contract for multisignature bridge
 contract swapContract is AccessControl, Pausable, ECDSAOffsetRecovery
 {
     using SafeMath for uint256;
@@ -37,6 +38,10 @@ contract swapContract is AccessControl, Pausable, ECDSAOffsetRecovery
     event TransferFromOtherBlockchain(address user, uint256 amount);
     event TransferToOtherBlockchain(uint128 blockchain, address user, uint256 amount, string newAddress);
     
+
+    /** 
+      * @dev throws if transaction sender is not in owner role
+      */
     modifier onlyOwner() {
         require(
             hasRole(OWNER_ROLE, _msgSender()),
@@ -45,6 +50,9 @@ contract swapContract is AccessControl, Pausable, ECDSAOffsetRecovery
         _;
     }
 
+    /** 
+      * @dev throws if transaction sender is not in owner or manager role
+      */
     modifier onlyOwnerAndManager() {
         require(
             hasRole(OWNER_ROLE, _msgSender()) || hasRole(MANAGER_ROLE, _msgSender()),
@@ -53,6 +61,9 @@ contract swapContract is AccessControl, Pausable, ECDSAOffsetRecovery
         _;
     }
 
+    /** 
+      * @dev throws if transaction sender is not in relayer role
+      */
     modifier onlyRelayer() {
         require(
             hasRole(RELAYER_ROLE, _msgSender()),
@@ -61,6 +72,17 @@ contract swapContract is AccessControl, Pausable, ECDSAOffsetRecovery
         _;
     }
 
+    /** 
+      * @dev Constructor of contract
+      * @param _tokenAddress address Address of token contract
+      * @param _feeAddress Address to receive deducted fees
+      * @param _numOfThisBlockchain Number of blockchain where contract is deployed
+      * @param _numsOfOtherBlochcains List of blockchain number that is supported by bridge
+      * @param _minConfirmationSignatures Number of required signatures for token swap
+      * @param _minTokenAmount Minimal amount of tokens required for token swap
+      * @param _maxGasPrice Maximum gas price on which relayer nodes will operate
+      * @param _minConfirmationBlocks Minimal amount of blocks for confirmation on validator nodes
+      */
     constructor(
         IERC20 _tokenAddress,
         address _feeAddress,
@@ -93,11 +115,22 @@ contract swapContract is AccessControl, Pausable, ECDSAOffsetRecovery
         _setupRole(OWNER_ROLE, _msgSender());
     }
 
+    /** 
+      * @dev Returns true if blockchain of passed id is registered to swap
+      * @param blockchain number of blockchain
+      */
     function getOtherBlockchainAvailableByNum(uint128 blockchain) external view returns (bool)
     {
         return existingOtherBlockchain[blockchain];
     }
 
+    /** 
+      * @dev Transfers tokens from sender to the contract. 
+      * User calls this function when he wants to transfer tokens to another blockchain.
+      * @param blockchain Number of blockchain
+      * @param amount Amount of tokens
+      * @param newAddress Address in the blockchain to which the user wants to transfer
+      */
     function transferToOtherBlockchain(uint128 blockchain, uint256 amount, string memory newAddress) external whenNotPaused
     {
         require(
@@ -120,7 +153,13 @@ contract swapContract is AccessControl, Pausable, ECDSAOffsetRecovery
         tokenAddress.transferFrom(sender, address(this), amount);
         emit TransferToOtherBlockchain(blockchain, sender, amount, newAddress);
     }
-
+    /** 
+      * @dev Transfers tokens to end user in current blockchain 
+      * @param user User address
+      * @param amountWithFe Amount of tokens with included fees
+      * @param originalTxHash Hash of transaction from other network, on which swap was called
+      * @param concatSignatures Concatenated string of signature bytes for verification of transaction
+      */
     function transferToUserWithFee(
         address user,
         uint256 amountWithFee,
@@ -171,7 +210,10 @@ contract swapContract is AccessControl, Pausable, ECDSAOffsetRecovery
     }
 
     // OTHER BLOCKCHAIN MANAGEMENT
-
+    /** 
+      * @dev Registers another blockchain for availability to swap
+      * @param numOfOtherBlockchain number of blockchain
+      */
     function addOtherBlockchain(
         uint128 numOfOtherBlockchain
     )
@@ -189,6 +231,10 @@ contract swapContract is AccessControl, Pausable, ECDSAOffsetRecovery
         existingOtherBlockchain[numOfOtherBlockchain] = true;
     }
 
+    /** 
+      * @dev Unregisters another blockchain for availability to swap
+      * @param numOfOtherBlockchain number of blockchain
+      */
     function removeOtherBlockchain(
         uint128 numOfOtherBlockchain
     )
@@ -202,6 +248,11 @@ contract swapContract is AccessControl, Pausable, ECDSAOffsetRecovery
         existingOtherBlockchain[numOfOtherBlockchain] = false;
     }
 
+    /** 
+      * @dev Change existing blockchain id
+      * @param oldNumOfOtherBlockchain number of existing blockchain
+      * @param newNumOfOtherBlockchain number of new blockchain
+      */
     function changeOtherBlockchain(
         uint128 oldNumOfOtherBlockchain,
         uint128 newNumOfOtherBlockchain
@@ -233,36 +284,69 @@ contract swapContract is AccessControl, Pausable, ECDSAOffsetRecovery
 
     // FEE MANAGEMENT
 
+    /** 
+      * @dev Changes address which receives fees from transfers
+      * @param newFeeAddress New address for fees
+      */
     function changeFeeAddress(address newFeeAddress) external onlyOwnerAndManager
     {
         feeAddress = newFeeAddress;
     }
 
+    /** 
+      * @dev Changes fee values for blockchains in feeAmountOfBlockchain variables
+      * @param blockchainNum Existing number of blockchain
+      * @param feeAmount Fee amount to substruct from transfer amount
+      */
     function setFeeAmountOfBlockchain(uint128 blockchainNum, uint128 feeAmount) external onlyOwnerAndManager
     {
         feeAmountOfBlockchain[blockchainNum] = feeAmount;
     }
 
     // VALIDATOR CONFIRMATIONS MANAGEMENT
-    
+
+    /** 
+      * @dev Changes requirement for minimal amount of signatures to validate on transfer
+      * @param _minConfirmationSignatures Number of signatures to verify
+      */
     function setMinConfirmationSignatures(uint256 _minConfirmationSignatures) external onlyOwner {
         require(_minConfirmationSignatures > 0, "swapContract: At least 1 confirmation can be set");
         minConfirmationSignatures = _minConfirmationSignatures;
     }
 
+    /** 
+      * @dev Changes requirement for minimal token amount on transfers
+      * @param _minTokenAmount Amount of tokens
+      */
     function setMinTokenAmount(uint256 _minTokenAmount) external onlyOwnerAndManager {
         minTokenAmount = _minTokenAmount;
     }
 
+    /** 
+      * @dev Changes parameter of maximum gas price on which relayer nodes will operate
+      * @param _maxGasPrice Price of gas in wei
+      */
     function setMaxGasPrice(uint256 _maxGasPrice) external onlyOwnerAndManager {
         require(_maxGasPrice > 0, "swapContract: Gas price cannot be zero");
         maxGasPrice = _maxGasPrice;
     }
 
+    /** 
+      * @dev Changes requirement for minimal amount of block to consider tx confirmed on validator
+      * @param _minConfirmationBlocks Amount of blocks
+      */
+
     function setMinConfirmationBlocks(uint256 _minConfirmationBlocks) external onlyOwnerAndManager {
         minConfirmationBlocks = _minConfirmationBlocks;
     }
 
+    /** 
+      * @dev Transfers permissions of contract ownership. 
+      * Will setup new owner and one manager on contract.
+      * Main purpose of this function is to transfer ownership from deployer account ot real owner
+      * @param newOwner Address of new owner
+      * @param newManager Address of new manager
+      */
     function transferOwnerAndSetManager(address newOwner, address newManager) external onlyOwner {
         require(newOwner != _msgSender(), "swapContract: New owner must be different than current");
         require(newOwner != address(0x0), "swapContract: Owner cannot be zero address");
@@ -274,30 +358,58 @@ contract swapContract is AccessControl, Pausable, ECDSAOffsetRecovery
         renounceRole(DEFAULT_ADMIN_ROLE, _msgSender());
     }
 
+    /** 
+      * @dev Pauses transfers of tokens on contract
+      */
     function pauseExecution() external onlyOwner {
         _pause();
     }
 
+    /** 
+      * @dev Resumes transfers of tokens on contract
+      */
     function continueExecution() external onlyOwner {
         _unpause();
     }
 
+    /** 
+      * @dev Function to check if address is belongs to owner role
+      * @param account Address to check
+      */
     function isOwner(address account) public view returns (bool) {
         return hasRole(OWNER_ROLE, account);
     }
 
+    /** 
+      * @dev Function to check if address is belongs to manager role
+      * @param account Address to check
+      */
     function isManager(address account) public view returns (bool) {
         return hasRole(MANAGER_ROLE, account);
     }
 
+    /** 
+      * @dev Function to check if address is belongs to relayer role
+      * @param account Address to check
+      */
     function isRelayer(address account) public view returns (bool) {
         return hasRole(RELAYER_ROLE, account);
     }
 
+    /** 
+      * @dev Function to check if address is belongs to validator role
+      * @param account Address to check
+      * 
+      */
     function isValidator(address account) public view returns (bool) {
         return hasRole(VALIDATOR_ROLE, account);
     }
 
+    /** 
+      * @dev Function to check if transfer of tokens on previous
+      * transaction from other blockchain was executed
+      * @param originalTxHash Transaction hash to check
+      */
     function isProcessedTransaction(bytes32 originalTxHash) public view returns (bool processed, bytes32 hashedParams) {
         hashedParams = processedTransactions[originalTxHash];
         processed = hashedParams != bytes32(0);
