@@ -72,9 +72,9 @@ module.exports = {
             skipDryRun: true
         },
         bscTestnet: {
-            provider: () => new HDWalletProvider(MNEMONIC, "https://data-seed-prebsc-1-s3.binance.org:8545"),
+            provider: () => new HDWalletProvider(MNEMONIC, "https://data-seed-prebsc-1-s1.binance.org:8545/"),
             network_id: 97,
-            confirmations: 2,
+            confirmations: 0,
             timeoutBlocks: 200,
             gasPrice: web3.utils.toWei(DEPLOY_GAS_PRICE, 'gwei'),
             gas: DEPLOY_GAS_LIMIT_MAX,
