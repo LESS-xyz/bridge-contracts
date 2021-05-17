@@ -8,7 +8,9 @@ const {
     BSCSCAN_API_KEY,
     MNEMONIC,
     DEPLOY_GAS_LIMIT_MAX,
-    DEPLOY_GAS_PRICE,
+    DEPLOY_GAS_PRICE_TESTNET,
+    DEPLOY_GAS_PRICE_ETH_MAINNET,
+    DEPLOY_GAS_PRICE_BSC_MAINNET,
     INFURA_ID_PROJECT
 } = process.env;
 
@@ -44,6 +46,7 @@ module.exports = {
         ropsten: {
             provider: () => new HDWalletProvider(MNEMONIC, "https://ropsten.infura.io/v3/" + INFURA_ID_PROJECT),
             network_id: 3,
+            gasPrice: web3.utils.toWei(DEPLOY_GAS_PRICE_TESTNET, 'gwei'),
             gas: DEPLOY_GAS_LIMIT_MAX,
             confirmations: 0,
             skipDryRun: true
@@ -52,7 +55,7 @@ module.exports = {
             provider: () => new HDWalletProvider(MNEMONIC, "https://mainnet.infura.io/v3/" + INFURA_ID_PROJECT),
             network_id: 1,
             confirmations: 10,
-            gasPrice: web3.utils.toWei(DEPLOY_GAS_PRICE, 'gwei'),
+            gasPrice: web3.utils.toWei(DEPLOY_GAS_PRICE_ETH_MAINNET, 'gwei'),
             gas: DEPLOY_GAS_LIMIT_MAX,
             skipDryRun: false
         },
@@ -60,7 +63,7 @@ module.exports = {
             provider: () => new HDWalletProvider(MNEMONIC, "https://kovan.infura.io/v3/" + INFURA_ID_PROJECT),
             network_id: 42,
             confirmations: 0,
-            gasPrice: web3.utils.toWei(DEPLOY_GAS_PRICE, 'gwei'),
+            gasPrice: web3.utils.toWei(DEPLOY_GAS_PRICE_TESTNET, 'gwei'),
             gas: DEPLOY_GAS_LIMIT_MAX,
             skipDryRun: true
         },
@@ -68,6 +71,7 @@ module.exports = {
             provider: () => new HDWalletProvider(MNEMONIC, "https://rinkeby.infura.io/v3/" + INFURA_ID_PROJECT),
             network_id: 4,
             confirmations: 2,
+            gasPrice: web3.utils.toWei(DEPLOY_GAS_PRICE_TESTNET, 'gwei'),
             gas: DEPLOY_GAS_LIMIT_MAX,
             skipDryRun: true
         },
@@ -76,7 +80,7 @@ module.exports = {
             network_id: 97,
             confirmations: 0,
             timeoutBlocks: 200,
-            gasPrice: web3.utils.toWei(DEPLOY_GAS_PRICE, 'gwei'),
+            gasPrice: web3.utils.toWei(DEPLOY_GAS_PRICE_TESTNET, 'gwei'),
             gas: DEPLOY_GAS_LIMIT_MAX,
             skipDryRun: true
         },
@@ -85,7 +89,7 @@ module.exports = {
             network_id: 56,
             confirmations: 10,
             timeoutBlocks: 200,
-            gasPrice: web3.utils.toWei(DEPLOY_GAS_PRICE, 'gwei'),
+            gasPrice: web3.utils.toWei(DEPLOY_GAS_PRICE_BSC_MAINNET, 'gwei'),
             gas: DEPLOY_GAS_LIMIT_MAX,
             skipDryRun: false
         }

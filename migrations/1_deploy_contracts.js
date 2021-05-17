@@ -15,6 +15,8 @@ const {
     DECIMALS,
     TOKEN_ADDRESS_ETH,
     TOKEN_ADDRESS_BSC,
+    TOKEN_UNLIMITED_ETH,
+    TOKEN_UNLIMITED_BSC,
     NUM_BLOCKCHAIN_FOR_BSC,
     NUM_BLOCKCHAIN_FOR_ETH,
     ALL_BLOCKCHAIN_NUMS_LIST,
@@ -26,7 +28,6 @@ const {
     TOKEN_CONTRACT_OWNER,
     BRIDGE_TRANSFER_OWNERSHIP,
     MAX_TOTAL_SUPPLY,
-    BRIDGE_TRANSFER_OWNERSHIP,
     PREMINT_SUPPLY_DEST_BSC,
     PREMINT_SUPPLY_DEST_ETH,
     // Relayer update parameters
@@ -43,6 +44,7 @@ const {
 } = process.env;
 
 const testToken = artifacts.require("testToken");
+const testTokenUnlimited = artifacts.require("testTokenUnlimited");
 const swapContract = artifacts.require("swapContract");
 
 const ZERO = new BN(0);
@@ -56,6 +58,7 @@ module.exports = async function (deployer, network) {
     let symbol;
     let blockchainNum;
     let withToken;
+    let tokenUnlimited;
     let tokenAddressIfExist;
     let allBlockchainNums = ALL_BLOCKCHAIN_NUMS_LIST.split(',')
     let premintSupplyDest;
@@ -74,6 +77,7 @@ module.exports = async function (deployer, network) {
         premintSupplyDest = PREMINT_SUPPLY_DEST_BSC;
         minTokenAmount = MIN_TOKEN_AMOUNT_BSC;
         maxGasPrice = MAX_GAS_PRICE_BSC;
+        tokenUnlimited = TOKEN_UNLIMITED_BSC;
     }
     else
     {
@@ -88,25 +92,37 @@ module.exports = async function (deployer, network) {
         premintSupplyDest = PREMINT_SUPPLY_DEST_ETH;
         minTokenAmount = MIN_TOKEN_AMOUNT_ETH;
         maxGasPrice = MAX_GAS_PRICE_ETH;
+        tokenUnlimited = TOKEN_UNLIMITED_ETH;
     }
 
     let token;
     if (withToken == "true")
     {
-        await deployer.deploy(
-            testToken,
-            name,
-            symbol,
-            MAX_TOTAL_SUPPLY,
-            DECIMALS,
-            {gas: DEPLOY_GAS_LIMIT_TOKEN}
-        );
-        token = await testToken.deployed();
-        tokenAddress = token.address;
+        if (tokenUnlimited == "true") {
+            await deployer.deploy(
+                testTokenUnlimited,
+                name,
+                symbol,
+                DECIMALS,
+                {gas: DEPLOY_GAS_LIMIT_TOKEN}
+            );
+            token = await testTokenUnlimited.deployed();
+        } else {
+            await deployer.deploy(
+                testToken,
+                name,
+                symbol,
+                MAX_TOTAL_SUPPLY,
+                DECIMALS,
+                {gas: DEPLOY_GAS_LIMIT_TOKEN}
+            );
+            token = await testToken.deployed();
+        }
         
+        tokenAddress = token.address;
+        console.log('token deployed address: ', tokenAddress)    
     }
     else
-        //tokenAddress = await testToken.at(tokenAddressIfExist);
         tokenAddress = tokenAddressIfExist;
 
     await deployer.deploy(
@@ -122,6 +138,7 @@ module.exports = async function (deployer, network) {
         {gas: DEPLOY_GAS_LIMIT_BRIDGE}
     );
     let swapContractInst = await swapContract.deployed();
+    console.log('swap deployed address: ', swapContractInst.address)
     if (withToken == "true" && premintSupplyDest != "")
     {
         if (premintSupplyDest == "swapContract") {

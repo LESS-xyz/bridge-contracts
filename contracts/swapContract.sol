@@ -35,7 +35,7 @@ contract swapContract is AccessControl, Pausable, ECDSAOffsetRecovery
     uint256 public maxGasPrice;
     uint256 public minConfirmationBlocks;
 
-    event TransferFromOtherBlockchain(address user, uint256 amount);
+    event TransferFromOtherBlockchain(address user, uint256 amount, bytes32 originalTxHash);
     event TransferToOtherBlockchain(uint128 blockchain, address user, uint256 amount, string newAddress);
     
 
@@ -77,7 +77,7 @@ contract swapContract is AccessControl, Pausable, ECDSAOffsetRecovery
       * @param _tokenAddress address Address of token contract
       * @param _feeAddress Address to receive deducted fees
       * @param _numOfThisBlockchain Number of blockchain where contract is deployed
-      * @param _numsOfOtherBlochcains List of blockchain number that is supported by bridge
+      * @param _numsOfOtherBlockchains List of blockchain number that is supported by bridge
       * @param _minConfirmationSignatures Number of required signatures for token swap
       * @param _minTokenAmount Minimal amount of tokens required for token swap
       * @param _maxGasPrice Maximum gas price on which relayer nodes will operate
@@ -156,7 +156,7 @@ contract swapContract is AccessControl, Pausable, ECDSAOffsetRecovery
     /** 
       * @dev Transfers tokens to end user in current blockchain 
       * @param user User address
-      * @param amountWithFe Amount of tokens with included fees
+      * @param amountWithFee Amount of tokens with included fees
       * @param originalTxHash Hash of transaction from other network, on which swap was called
       * @param concatSignatures Concatenated string of signature bytes for verification of transaction
       */
@@ -206,7 +206,7 @@ contract swapContract is AccessControl, Pausable, ECDSAOffsetRecovery
         uint256 fee = feeAmountOfBlockchain[numOfThisBlockchain];
         tokenAddress.transfer(user, amountWithFee.sub(fee));
         tokenAddress.transfer(feeAddress, fee);
-        emit TransferFromOtherBlockchain(user, amountWithFee);
+        emit TransferFromOtherBlockchain(user, amountWithFee, originalTxHash);
     }
 
     // OTHER BLOCKCHAIN MANAGEMENT
