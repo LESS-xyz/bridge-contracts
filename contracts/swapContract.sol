@@ -35,7 +35,7 @@ contract swapContract is AccessControl, Pausable, ECDSAOffsetRecovery
     uint256 public maxGasPrice;
     uint256 public minConfirmationBlocks;
 
-    event TransferFromOtherBlockchain(address user, uint256 amount, bytes32 originalTxHash);
+    event TransferFromOtherBlockchain(address user, uint256 amount, uint256 amountWithoutFee, bytes32 originalTxHash);
     event TransferToOtherBlockchain(uint128 blockchain, address user, uint256 amount, string newAddress);
     
 
@@ -204,9 +204,10 @@ contract swapContract is AccessControl, Pausable, ECDSAOffsetRecovery
         processedTransactions[originalTxHash] = hashedParams;
 
         uint256 fee = feeAmountOfBlockchain[numOfThisBlockchain];
-        tokenAddress.transfer(user, amountWithFee.sub(fee));
+        uint256 amountWithoutFee = amountWithFee.sub(fee);
+        tokenAddress.transfer(user, amountWithoutFee);
         tokenAddress.transfer(feeAddress, fee);
-        emit TransferFromOtherBlockchain(user, amountWithFee, originalTxHash);
+        emit TransferFromOtherBlockchain(user, amountWithFee, amountWithoutFee, originalTxHash);
     }
 
     // OTHER BLOCKCHAIN MANAGEMENT
